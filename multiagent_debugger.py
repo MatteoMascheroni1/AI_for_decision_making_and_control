@@ -21,9 +21,14 @@ class MultiAgentThreeDGridEnv:
 
         assert not (set(starts) & self.obstacles), "Start positions must not be in obstacles"
         assert not (set(destinations) & self.obstacles), "Destination positions must not be in obstacles"
+        assert not(set([(0,0,1),(0,1,0),(1,0,0)])& self.obstacles), "Agent 0 is blocked"
+        assert not(set([(0,0,8),(0,1,9),(1,0,9)])& self.obstacles), "Agent 1 is blocked"
+        assert not(set([(9,9,8),(8,9,9),(9,8,9)])& self.obstacles), "Destination 0 is blocked"
+        assert not(set([(9,9,1),(8,9,0),(9,8,0)])& self.obstacles), "Destination 0 is blocked"
 
     def _generate_obstacles(self):
         obstacles = set()
+
         while len(obstacles) < self.n_obstacles:
             obstacle = tuple(np.random.randint(0, s) for s in self.shape)
             if obstacle not in self.starts and obstacle not in self.destinations:
@@ -38,6 +43,20 @@ class MultiAgentThreeDGridEnv:
     def restart(self):
         self.agent_positions = list(self.starts)
         return [self._get_state(i) for i in range(len(self.starts))]
+
+    def select_action(self, epsilon=1):
+        actions = []
+        move = [(0, 0, 0), (0, 0, 1), (0, 0, -1), (0, -1, 0), (0, 1, 0), (1, 0, 0), (-1, 0, 0)]
+        # epsilon is the probability of choosing a random action
+        if np.random.binomial(1, epsilon):
+             actions = [np.random.randint(len(move)), np.random.randint(len(move))]
+        # perform the best action
+        else:
+            prev_state = [self._get_state_single(0), self._get_state_single(1)]
+            for i, state in enumerate(prev_state):
+                actions.append(np.argmax(self.Q[i][np.where(state.flatten() == i+1)]))
+        return actions
+
 
     def step(self, actions):
         new_positions = []
@@ -75,13 +94,13 @@ class MultiAgentThreeDGridEnv:
         states = [self._get_state_single(i) for i in range(len(self.starts))]
         return states, rewards, dones
 
-    def episode(self):
+    def episode(self, epsilon=1):
         self.agent_positions = list(self.starts)
         dones = [False * 2]
         steps = 0
         while dones.count(True) != 2:
             steps += 1
-            actions = [np.random.randint(7), np.random.randint(7)]
+            actions = self.select_action(epsilon=epsilon)
             prev_state = [self._get_state_single(0), self._get_state_single(1)]
             new_state,rewards, done = self.step(actions=actions)
             dones = done
@@ -169,7 +188,7 @@ class MultiAgentThreeDGridEnv:
         while not done:
             s = np.where(state.flatten() == agent_index+1)
             Q_prov = self.Q[agent_index]
-            Q_prov[Q_prov == 0] = -100
+            Q_prov[Q_prov == 0] = -100000
             best_action = np.argmax(Q_prov[s])
             policy.append(best_action)
             pos = tuple(np.add(pos, move[best_action]))
@@ -225,5 +244,4 @@ class MultiAgentThreeDGridEnv:
 m = MultiAgentThreeDGridEnv()
 
 m.reset()
-m.episode()
-m._get_policy_noloop(0)
+m.episode(epsilon= 0.8)
